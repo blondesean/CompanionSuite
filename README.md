@@ -8,6 +8,7 @@ A private iPhone app (PWA) for two people: weekly chores, meal prep with a groce
 - **Chores**: shows each week's chores, who did each one last time, and who did it this week. Chores repeat every N weeks. The History tab has a table of completions you can filter by date, person and chore.
 - **Meals**: pick a recipe for breakfast, lunch, dinner and filler each week. Recipes hold ingredients with amounts. The grocery list adds up every ingredient alphabetically, with check-offs, Share and Copy.
 - **To-Do**: due dates, assignee (anyone, either of you, or both) and reminder times. Reminders go to the assignee, or to both of you if it's unassigned or assigned to both. Completing a task plays a click-and-chime sound and moves it to the Done history.
+- **Fun**: a shared list of things to do together (date nights, food, activities, trips, at home). Filter by category, use **🎲 Pick one for us** to choose at random, and mark ideas done on a date. They go to a "Done together" log grouped by month, with a "Do again" button.
 
 ## How it fits together
 

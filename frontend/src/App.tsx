@@ -6,6 +6,7 @@ import type { AuthClient, User } from './auth';
 import { ChoreHistory } from './pages/chores/ChoreHistory';
 import { ChoreManage } from './pages/chores/ChoreManage';
 import { ChoresLayout, ChoreWeekView } from './pages/chores/Chores';
+import { FunDone, FunIdeas, FunLayout } from './pages/fun/Fun';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { GroceryList } from './pages/meals/GroceryList';
@@ -69,6 +70,11 @@ export function App({ auth }: { auth: AuthClient }) {
         <Route path="/todo" element={<TodoLayout />}>
           <Route index element={<TodoList />} />
           <Route path="history" element={<TodoHistory />} />
+        </Route>
+
+        <Route path="/fun" element={<FunLayout />}>
+          <Route index element={<FunIdeas />} />
+          <Route path="done" element={<FunDone />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

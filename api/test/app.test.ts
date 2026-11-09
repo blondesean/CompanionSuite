@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ChoreWeek, Completion, MealPlan, Recipe, Summary, Todo } from '../../shared/types';
+import type { ChoreWeek, Completion, FunIdea, MealPlan, Recipe, Summary, Todo } from '../../shared/types';
 import { router } from '../src/app';
 import type { Deps, PushPayload } from '../src/http';
 import { sendDueReminders } from '../src/reminders';
@@ -123,6 +123,36 @@ describe('meals', () => {
       (await call('POST', '/recipes', { name: 'Bad', ingredients: [{ name: 'X', quantity: 1, unit: 'bucket' }] }))
         .status,
     ).toBe(400);
+  });
+});
+
+describe('fun ideas', () => {
+  it('adds ideas, marks them done together, and restores them', async () => {
+    const picnic = await ok<FunIdea>('POST', '/fun', { title: 'Picnic at the park', category: 'date', notes: '' });
+    await ok('POST', '/fun', { title: 'Try the ramen place', category: 'food' }, PARTNER);
+    expect((await ok<Summary>('GET', '/summary?week=2026-11-02')).funIdeas).toBe(2);
+
+    const done = await ok<FunIdea>('POST', `/fun/${picnic.id}/done`, { doneOn: '2026-11-07' }, PARTNER);
+    expect(done).toMatchObject({ doneOn: '2026-11-07', doneBy: 'partner' });
+    expect((await ok<Summary>('GET', '/summary?week=2026-11-02')).funIdeas).toBe(1);
+
+    const edited = await ok<FunIdea>('PUT', `/fun/${picnic.id}`, { title: 'Picnic + frisbee', category: 'activity' });
+    expect(edited).toMatchObject({ title: 'Picnic + frisbee', doneOn: '2026-11-07' }); // editing keeps done state
+
+    await ok('POST', `/fun/${picnic.id}/undone`);
+    const all = await ok<FunIdea[]>('GET', '/fun');
+    expect(all.every((i) => i.doneOn === null)).toBe(true);
+
+    await ok('DELETE', `/fun/${picnic.id}`);
+    expect((await ok<FunIdea[]>('GET', '/fun')).map((i) => i.title)).toEqual(['Try the ramen place']);
+  });
+
+  it('validates ideas', async () => {
+    expect((await call('POST', '/fun', { title: '', category: 'date' })).status).toBe(400);
+    expect((await call('POST', '/fun', { title: 'X', category: 'skydiving' })).status).toBe(400);
+    const idea = await ok<FunIdea>('POST', '/fun', { title: 'X', category: 'other' });
+    expect((await call('POST', `/fun/${idea.id}/done`, { doneOn: 'last week' })).status).toBe(400);
+    expect((await call('POST', '/fun/nope/done', { doneOn: '2026-11-07' })).status).toBe(404);
   });
 });
 

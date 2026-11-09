@@ -2,11 +2,15 @@ import { createHash } from 'node:crypto';
 import { buildChoreWeek, isChoreDue } from '../../shared/chores';
 import { REMINDER_MINUTES } from '../../shared/reminders';
 import {
+  FUN_CATEGORIES,
   MEAL_SLOTS,
   UNITS,
   type Chore,
   type ChoreInput,
   type Completion,
+  type FunCategory,
+  type FunIdea,
+  type FunIdeaInput,
   type MealPlan,
   type MealSlots,
   type Recipe,
@@ -15,7 +19,7 @@ import {
   type TodoInput,
   type Unit,
 } from '../../shared/types';
-import { addWeeks, currentWeek, isWeekStart } from '../../shared/weeks';
+import { addWeeks, currentWeek, isISODate, isWeekStart } from '../../shared/weeks';
 import {
   asObject,
   badRequest,
@@ -56,11 +60,12 @@ router.on('GET', '/me', async ({ user }) => user);
 
 router.on('GET', '/summary', async ({ query, deps }): Promise<Summary> => {
   const week = query.week ? weekParam(query.week) : currentWeek(deps.now());
-  const [chores, completions, todos, plan] = await Promise.all([
+  const [chores, completions, todos, plan, fun] = await Promise.all([
     deps.store.query<Chore>('CHORE'),
     deps.store.query<Completion>('COMPLETION', { beginsWith: `${week}#` }),
     deps.store.query<StoredTodo>('TODO'),
     deps.store.get<MealPlan>('MEALPLAN', week),
+    deps.store.query<FunIdea>('FUN'),
   ]);
   const due = chores.filter((c) => isChoreDue(c, week));
   const done = new Set(completions.map((c) => c.choreId));
@@ -71,6 +76,7 @@ router.on('GET', '/summary', async ({ query, deps }): Promise<Summary> => {
     mealsPlanned: plan ? MEAL_SLOTS.filter((s) => plan.slots[s]).length : 0,
     todosOpen: todos.length,
     todosOverdue: todos.filter((t) => t.dueAt && t.dueAt < now).length,
+    funIdeas: fun.filter((f) => !f.doneOn).length,
   };
 });
 
@@ -367,4 +373,74 @@ router.on('POST', '/push/test', async ({ user, deps }) => {
     tag: 'test',
   });
   return { sent };
+});
+
+// ---------- fun ideas ----------
+
+const FUN_CATEGORY_IDS: readonly string[] = FUN_CATEGORIES.map((c) => c.id);
+
+function parseFun(body: unknown): FunIdeaInput {
+  const o = asObject(body);
+  if (!FUN_CATEGORY_IDS.includes(o.category as string)) throw badRequest('Unknown category');
+  return {
+    title: str(o.title, 'Title', { min: 1, max: 120 }),
+    category: o.category as FunCategory,
+    notes: o.notes == null ? '' : str(o.notes, 'Notes', { max: 2000 }),
+  };
+}
+
+async function getFun(deps: Deps, id: string): Promise<FunIdea> {
+  const idea = await deps.store.get<FunIdea>('FUN', id);
+  if (!idea) throw notFound('Idea');
+  return clean(idea);
+}
+
+/** Ideas newest first; done ones by the date you did them, newest first. */
+router.on('GET', '/fun', async ({ deps }) =>
+  (await deps.store.query<FunIdea>('FUN'))
+    .map(clean)
+    .sort((a, b) => {
+      const ka = a.doneOn ?? a.createdAt;
+      const kb = b.doneOn ?? b.createdAt;
+      return ka < kb ? 1 : ka > kb ? -1 : 0;
+    }),
+);
+
+router.on('POST', '/fun', async ({ body, user, deps }) => {
+  const now = deps.now().toISOString();
+  const idea: FunIdea = {
+    ...parseFun(body),
+    id: deps.newId(),
+    createdBy: user.id,
+    createdAt: now,
+    updatedAt: now,
+    doneOn: null,
+    doneBy: null,
+  };
+  await deps.store.put('FUN', idea.id, idea);
+  return idea;
+});
+
+router.on('PUT', '/fun/:id', async ({ params, body, deps }) => {
+  const idea: FunIdea = { ...(await getFun(deps, params.id)), ...parseFun(body), updatedAt: deps.now().toISOString() };
+  await deps.store.put('FUN', idea.id, idea);
+  return idea;
+});
+
+router.on('POST', '/fun/:id/done', async ({ params, body, user, deps }) => {
+  const { doneOn } = asObject(body);
+  if (!isISODate(doneOn)) throw badRequest('doneOn must be a date (YYYY-MM-DD)');
+  const idea: FunIdea = { ...(await getFun(deps, params.id)), doneOn, doneBy: user.id, updatedAt: deps.now().toISOString() };
+  await deps.store.put('FUN', idea.id, idea);
+  return idea;
+});
+
+router.on('POST', '/fun/:id/undone', async ({ params, deps }) => {
+  const idea: FunIdea = { ...(await getFun(deps, params.id)), doneOn: null, doneBy: null, updatedAt: deps.now().toISOString() };
+  await deps.store.put('FUN', idea.id, idea);
+  return idea;
+});
+
+router.on('DELETE', '/fun/:id', async ({ params, deps }) => {
+  await deps.store.delete('FUN', params.id);
 });

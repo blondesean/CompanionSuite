@@ -42,6 +42,13 @@ const TILES: Tile[] = [
           ? { text: `${s.todosOpen} open` }
           : { text: 'All clear' },
   },
+  {
+    to: '/fun',
+    label: 'Fun',
+    icon: '🎡',
+    tone: 'fun',
+    status: (s) => ({ text: s.funIdeas === 0 ? 'Add ideas' : `${s.funIdeas} idea${s.funIdeas === 1 ? '' : 's'}` }),
+  },
 ];
 
 const GRID_SIZE = 9;

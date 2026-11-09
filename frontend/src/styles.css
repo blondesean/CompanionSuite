@@ -12,6 +12,7 @@
   --chores: #2a8c82;
   --meals: #d9692e;
   --todo: #6b5bd6;
+  --fun: #c2477c;
   --accent: #3f7d58;
 
   --radius: 16px;
@@ -36,6 +37,7 @@
     --chores: #4bb8ac;
     --meals: #f08d55;
     --todo: #978af0;
+    --fun: #e57aa7;
     --accent: #6bb68a;
     color-scheme: dark;
   }
@@ -44,6 +46,7 @@
 .module-chores { --accent: var(--chores); }
 .module-meals { --accent: var(--meals); }
 .module-todo { --accent: var(--todo); }
+.module-fun { --accent: var(--fun); }
 
 * { box-sizing: border-box; }
 
@@ -237,6 +240,7 @@ select {
 .tile-chores { --tone: var(--chores); }
 .tile-meals { --tone: var(--meals); }
 .tile-todo { --tone: var(--todo); }
+.tile-fun { --tone: var(--fun); }
 .tile-icon { font-size: 30px; position: absolute; top: 12px; left: 12px; }
 .tile-label { font-weight: 700; font-size: 16px; }
 .tile-status { font-size: 12px; color: var(--muted); min-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -426,6 +430,40 @@ select {
 .ingredients { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ingredient-row input, .ingredient-row select { padding: 9px 8px; }
 .ingredient-row select { padding-right: 24px; background-position: right 8px center; }
+
+.meal-slot.unplanned .slot-select { color: var(--muted); font-weight: 500; }
+.meal-slot.unplanned .meal-icon { opacity: 0.45; filter: grayscale(0.6); }
+.slot-select:disabled { opacity: 1; }
+.week-status { margin: -4px 0 0; font-size: 14px; }
+.card-center { align-items: center; text-align: center; }
+
+/* ---------- fun ---------- */
+
+.fun-icon { font-size: 24px; width: 32px; text-align: center; flex-shrink: 0; }
+.pick-btn { min-height: 52px; font-size: 17px; }
+.chips-scroll { flex-wrap: nowrap; overflow-x: auto; margin: 0 calc(-1 * var(--gutter)); padding: 2px var(--gutter); scrollbar-width: none; }
+.chips-scroll::-webkit-scrollbar { display: none; }
+.chips-scroll .chip { flex-shrink: 0; }
+.row-center { justify-content: center; }
+.pick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  padding: 28px 16px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 2px dashed color-mix(in srgb, var(--accent) 35%, transparent);
+  min-height: 190px;
+  justify-content: center;
+}
+.pick-card.settled { border-style: solid; border-color: var(--accent); animation: pop 0.35s ease; }
+.pick-icon { font-size: 44px; }
+.pick-title { font-size: 22px; line-height: 1.25; }
+.pick-notes { margin: 6px 0 0; color: var(--muted); font-size: 14px; white-space: pre-wrap; }
+.done-box { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.field-label { font-size: 14px; font-weight: 600; color: var(--muted); }
 
 .grocery-item .amount { font-weight: 650; white-space: nowrap; color: var(--accent); }
 .grocery-item.done .amount { color: var(--muted); }

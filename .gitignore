@@ -7,3 +7,4 @@ cdk.out/
 api/.local-data.json
 infra/outputs.json
 screenshots/
+.idea/

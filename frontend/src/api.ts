@@ -3,6 +3,8 @@ import type {
   ChoreInput,
   ChoreWeek,
   Completion,
+  FunIdea,
+  FunIdeaInput,
   MealPlan,
   MealSlots,
   Member,
@@ -82,6 +84,13 @@ export const api = {
   completeTodo: (id: string) => request<Todo>('POST', `/todos/${enc(id)}/complete`),
   reopenTodo: (id: string, completedAt: string) =>
     request<Todo>('POST', `/todos/${enc(id)}/reopen`, { completedAt }),
+
+  funIdeas: () => request<FunIdea[]>('GET', '/fun'),
+  createFunIdea: (input: FunIdeaInput) => request<FunIdea>('POST', '/fun', input),
+  updateFunIdea: (id: string, input: FunIdeaInput) => request<FunIdea>('PUT', `/fun/${enc(id)}`, input),
+  deleteFunIdea: (id: string) => request<void>('DELETE', `/fun/${enc(id)}`),
+  markFunDone: (id: string, doneOn: string) => request<FunIdea>('POST', `/fun/${enc(id)}/done`, { doneOn }),
+  markFunUndone: (id: string) => request<FunIdea>('POST', `/fun/${enc(id)}/undone`),
 
   pushKey: () => request<{ publicKey: string | null }>('GET', '/push/key'),
   subscribePush: (subscription: PushSubscriptionJSON) =>

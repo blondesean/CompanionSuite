@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet } from 'react-router';
 import { MEAL_SLOT_LABELS, MEAL_SLOTS, type MealPlan, type MealSlot, type MealSlots } from '../../../../shared/types';
 import { api } from '../../api';
-import { Empty, ErrorNote, Loading, PageHeader, Tabs, WeekNav } from '../../components/ui';
+import { ErrorNote, Loading, PageHeader, Tabs, WeekNav } from '../../components/ui';
 import { useWeekParam } from '../../hooks';
 
 const SLOT_ICONS: Record<MealSlot, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍝', filler: '🍎' };
@@ -57,22 +57,16 @@ export function MealWeekView() {
       {error && <ErrorNote error={error} />}
       {save.error && <ErrorNote error={save.error} />}
 
-      {recipes.data?.length === 0 && (
-        <Empty icon="📖" title="Add a recipe to start planning">
-          <p>Save your meal-prep recipes with their ingredients, then pick one for each meal.</p>
-          <Link to="/meals/recipes/new" className="btn btn-primary">
-            Add a recipe
-          </Link>
-        </Empty>
-      )}
-
-      {slots && recipes.data && recipes.data.length > 0 && (
+      {slots && recipes.data && (
         <>
+          <p className="muted center week-status">
+            {filled === 0 ? 'Nothing planned yet' : filled === MEAL_SLOTS.length ? 'All 4 meals planned ✓' : `${filled} of 4 meals planned`}
+          </p>
           <ul className="list">
             {MEAL_SLOTS.map((slot) => {
               const recipe = slots[slot] ? recipeById.get(slots[slot]!) : undefined;
               return (
-                <li key={slot} className="row-item meal-slot">
+                <li key={slot} className={`row-item meal-slot${recipe ? '' : ' unplanned'}`}>
                   <span className="meal-icon" aria-hidden="true">
                     {SLOT_ICONS[slot]}
                   </span>
@@ -81,6 +75,7 @@ export function MealWeekView() {
                     <select
                       className="slot-select"
                       value={recipe ? recipe.id : ''}
+                      disabled={recipes.data.length === 0}
                       onChange={(e) => save.mutate({ ...slots, [slot]: e.target.value || null })}
                     >
                       <option value="">Not planned</option>
@@ -106,7 +101,14 @@ export function MealWeekView() {
             })}
           </ul>
 
-          {filled > 0 ? (
+          {recipes.data.length === 0 ? (
+            <div className="card card-center">
+              <p>Add your meal-prep recipes with their ingredients, then pick one for each meal.</p>
+              <Link to="/meals/recipes/new" className="btn btn-primary">
+                Add a recipe
+              </Link>
+            </div>
+          ) : filled > 0 ? (
             <Link to={`/meals/grocery/${week}`} className="btn btn-primary btn-block">
               🛒 Grocery list
             </Link>

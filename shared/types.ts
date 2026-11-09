@@ -135,6 +135,34 @@ export interface Todo extends TodoInput {
   completedBy: string | null;
 }
 
+// ---------- Fun ----------
+
+export const FUN_CATEGORIES = [
+  { id: 'date', label: 'Date night', icon: '🍷' },
+  { id: 'food', label: 'Food', icon: '🍜' },
+  { id: 'activity', label: 'Activity', icon: '🎳' },
+  { id: 'trip', label: 'Trip', icon: '✈️' },
+  { id: 'home', label: 'At home', icon: '🛋️' },
+  { id: 'other', label: 'Other', icon: '✨' },
+] as const;
+export type FunCategory = (typeof FUN_CATEGORIES)[number]['id'];
+
+export interface FunIdeaInput {
+  title: string;
+  category: FunCategory;
+  notes: string;
+}
+
+export interface FunIdea extends FunIdeaInput {
+  id: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Local date (YYYY-MM-DD) you did it together, or null if still an idea. */
+  doneOn: string | null;
+  doneBy: string | null;
+}
+
 // ---------- Home ----------
 
 export interface Summary {
@@ -143,4 +171,5 @@ export interface Summary {
   mealsPlanned: number;
   todosOpen: number;
   todosOverdue: number;
+  funIdeas: number;
 }
