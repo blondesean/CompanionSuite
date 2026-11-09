@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 import { buildChoreWeek, isChoreDue } from '../../shared/chores';
 import { REMINDER_MINUTES } from '../../shared/reminders';
+import { defaultScale } from '../../shared/grocery';
 import {
+  ALL_UNITS,
   FUN_CATEGORIES,
+  MEAL_SLOT_LABELS,
   MEAL_SLOTS,
-  UNITS,
   type Chore,
   type ChoreInput,
   type Completion,
@@ -165,7 +167,7 @@ function parseRecipe(body: unknown): RecipeInput {
   const ingredients = o.ingredients.map((raw, i) => {
     const ing = asObject(raw);
     const label = `Ingredient ${i + 1}`;
-    if (!UNITS.includes(ing.unit as Unit)) throw badRequest(`${label}: unknown unit`);
+    if (!ALL_UNITS.includes(ing.unit as Unit)) throw badRequest(`${label}: unknown unit`);
     return {
       name: str(ing.name, `${label} name`, { min: 1, max: 80 }),
       quantity: num(ing.quantity, `${label} amount`, 0, 100_000),
@@ -204,16 +206,22 @@ router.on('DELETE', '/recipes/:id', async ({ params, deps }) => {
 
 const emptySlots = (): MealSlots => ({ breakfast: null, lunch: null, dinner: null, filler: null });
 
-router.on('GET', '/meals/:week', async ({ params, deps }): Promise<MealPlan> => {
-  const week = weekParam(params.week);
+/** Loads a week's plan; plans saved before portions existed get 1× everywhere. */
+async function loadPlan(deps: Deps, week: string): Promise<MealPlan> {
   const plan = await deps.store.get<MealPlan>('MEALPLAN', week);
-  return plan ? clean(plan) : { week, slots: emptySlots(), updatedAt: null, updatedBy: null };
-});
+  if (!plan) return { week, slots: emptySlots(), scale: defaultScale(), updatedAt: null, updatedBy: null };
+  return { ...clean(plan), scale: { ...defaultScale(), ...plan.scale } };
+}
+
+router.on('GET', '/meals/:week', async ({ params, deps }) => loadPlan(deps, weekParam(params.week)));
 
 router.on('PUT', '/meals/:week', async ({ params, body, user, deps }) => {
   const week = weekParam(params.week);
-  const raw = asObject(asObject(body).slots);
-  const recipeIds = new Set((await deps.store.query<Recipe>('RECIPE')).map((r) => r.id));
+  const o = asObject(body);
+  const raw = asObject(o.slots);
+  const [previous, recipes] = await Promise.all([loadPlan(deps, week), deps.store.query<Recipe>('RECIPE')]);
+  const recipeIds = new Set(recipes.map((r) => r.id));
+
   const slots = emptySlots();
   for (const slot of MEAL_SLOTS) {
     const value = raw[slot];
@@ -221,7 +229,18 @@ router.on('PUT', '/meals/:week', async ({ params, body, user, deps }) => {
     if (typeof value !== 'string' || !recipeIds.has(value)) throw badRequest(`Unknown recipe for ${slot}`);
     slots[slot] = value;
   }
-  const plan: MealPlan = { week, slots, updatedAt: deps.now().toISOString(), updatedBy: user.id };
+
+  // Portions: use the ones sent, otherwise keep the old ones, except a slot
+  // whose recipe changed starts over at 1×.
+  const scale = defaultScale();
+  const rawScale = o.scale === undefined ? null : asObject(o.scale);
+  for (const slot of MEAL_SLOTS) {
+    if (!slots[slot]) continue; // unplanned slots stay 1×
+    if (rawScale) scale[slot] = num(rawScale[slot] ?? 1, `${MEAL_SLOT_LABELS[slot]} portion`, 0.25, 10);
+    else if (slots[slot] === previous.slots[slot]) scale[slot] = previous.scale[slot];
+  }
+
+  const plan: MealPlan = { week, slots, scale, updatedAt: deps.now().toISOString(), updatedBy: user.id };
   await deps.store.put('MEALPLAN', week, plan);
   return plan;
 });

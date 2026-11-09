@@ -98,6 +98,14 @@ describe('chores', () => {
 });
 
 describe('meals', () => {
+  it('still accepts recipes saved with older units', async () => {
+    const legacy = await ok<Recipe>('POST', '/recipes', {
+      name: 'Old favorite',
+      ingredients: [{ name: 'Flour', quantity: 2, unit: 'cup' }],
+    });
+    expect(legacy.ingredients[0].unit).toBe('cup');
+  });
+
   it('saves recipes and weekly plans', async () => {
     const recipe = await ok<Recipe>('POST', '/recipes', {
       name: 'Chili',
@@ -119,6 +127,23 @@ describe('meals', () => {
     expect((await ok<Summary>('GET', '/summary?week=2026-11-02')).mealsPlanned).toBe(1);
 
     expect((await call('PUT', '/meals/2026-11-02', { slots: { dinner: 'nope' } })).status).toBe(400);
+
+    // Portions: saved with the plan, kept when other slots change, reset when the recipe changes.
+    expect(plan.scale).toEqual({ breakfast: 1, lunch: 1, dinner: 1, filler: 1 });
+    const oats = await ok<Recipe>('POST', '/recipes', { name: 'Oats', ingredients: [{ name: 'Oats', quantity: 1, unit: 'package' }] });
+    let scaled = await ok<MealPlan>('PUT', '/meals/2026-11-02', {
+      slots: { dinner: recipe.id },
+      scale: { dinner: 1.5 },
+    });
+    expect(scaled.scale.dinner).toBe(1.5);
+    scaled = await ok<MealPlan>('PUT', '/meals/2026-11-02', { slots: { dinner: recipe.id, breakfast: oats.id } });
+    expect(scaled.scale).toMatchObject({ dinner: 1.5, breakfast: 1 });
+    scaled = await ok<MealPlan>('PUT', '/meals/2026-11-02', { slots: { dinner: oats.id, breakfast: oats.id } });
+    expect(scaled.scale.dinner).toBe(1);
+    expect((await ok<MealPlan>('GET', '/meals/2026-11-02')).scale.dinner).toBe(1);
+    expect(
+      (await call('PUT', '/meals/2026-11-02', { slots: { dinner: recipe.id }, scale: { dinner: 50 } })).status,
+    ).toBe(400);
     expect(
       (await call('POST', '/recipes', { name: 'Bad', ingredients: [{ name: 'X', quantity: 1, unit: 'bucket' }] }))
         .status,

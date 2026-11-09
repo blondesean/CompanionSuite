@@ -46,26 +46,14 @@ export interface ChoreWeek {
 
 // ---------- Meals ----------
 
-export const UNITS = [
-  'each',
-  'g',
-  'kg',
-  'oz',
-  'lb',
-  'ml',
-  'L',
-  'tsp',
-  'tbsp',
-  'cup',
-  'fl oz',
-  'can',
-  'clove',
-  'bunch',
-  'slice',
-  'pinch',
-  'package',
-] as const;
-export type Unit = (typeof UNITS)[number];
+/** Units offered for ingredients: how you actually buy things. */
+export const UNITS = ['each', 'can', 'package', 'lb'] as const;
+/** Older units, still accepted so recipes saved with them keep working. */
+export const LEGACY_UNITS = ['g', 'kg', 'oz', 'ml', 'L', 'tsp', 'tbsp', 'cup', 'fl oz', 'clove', 'bunch', 'slice', 'pinch'] as const;
+export type Unit = (typeof UNITS)[number] | (typeof LEGACY_UNITS)[number];
+export const ALL_UNITS: readonly Unit[] = [...UNITS, ...LEGACY_UNITS];
+/** Display label in the unit picker, where it differs from the stored value. */
+export const UNIT_LABELS: Partial<Record<Unit, string>> = { lb: 'lbs' };
 
 export interface Ingredient {
   name: string;
@@ -97,9 +85,16 @@ export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
 
 export type MealSlots = Record<MealSlot, string | null>;
 
+/** Portion multiplier per slot (1 = the recipe as written). */
+export type MealScale = Record<MealSlot, number>;
+export const SCALE_MIN = 0.5;
+export const SCALE_MAX = 5;
+export const SCALE_STEP = 0.5;
+
 export interface MealPlan {
   week: string;
   slots: MealSlots;
+  scale: MealScale;
   updatedAt: string | null;
   updatedBy: string | null;
 }

@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet } from 'react-router';
+import { formatScale } from '../../../../shared/grocery';
 import { MEAL_SLOT_LABELS, MEAL_SLOTS, type MealPlan, type MealSlot, type MealSlots } from '../../../../shared/types';
 import { api } from '../../api';
 import { ErrorNote, Loading, PageHeader, Tabs, WeekNav } from '../../components/ui';
 import { useWeekParam } from '../../hooks';
 
-const SLOT_ICONS: Record<MealSlot, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍝', filler: '🍎' };
+export const SLOT_ICONS: Record<MealSlot, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍝', filler: '🍎' };
 
 export function MealsLayout() {
   return (
@@ -88,6 +89,7 @@ export function MealWeekView() {
                     {recipe && (
                       <span className="row-meta">
                         {recipe.ingredients.length} ingredient{recipe.ingredients.length === 1 ? '' : 's'}
+                        {plan.data!.scale[slot] !== 1 && ` · ${formatScale(plan.data!.scale[slot])} portion`}
                       </span>
                     )}
                   </label>

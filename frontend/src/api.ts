@@ -6,6 +6,7 @@ import type {
   FunIdea,
   FunIdeaInput,
   MealPlan,
+  MealScale,
   MealSlots,
   Member,
   Recipe,
@@ -74,7 +75,8 @@ export const api = {
   updateRecipe: (id: string, input: RecipeInput) => request<Recipe>('PUT', `/recipes/${enc(id)}`, input),
   deleteRecipe: (id: string) => request<void>('DELETE', `/recipes/${enc(id)}`),
   mealPlan: (week: string) => request<MealPlan>('GET', `/meals/${week}`),
-  saveMealPlan: (week: string, slots: MealSlots) => request<MealPlan>('PUT', `/meals/${week}`, { slots }),
+  saveMealPlan: (week: string, slots: MealSlots, scale?: MealScale) =>
+    request<MealPlan>('PUT', `/meals/${week}`, { slots, scale }),
 
   todos: () => request<Todo[]>('GET', '/todos'),
   todoHistory: () => request<Todo[]>('GET', '/todos/history'),

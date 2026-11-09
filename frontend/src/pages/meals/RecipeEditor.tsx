@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { formatQuantity, parseQuantity } from '../../../../shared/grocery';
-import { UNITS, type Ingredient, type Recipe, type RecipeInput, type Unit } from '../../../../shared/types';
+import { UNIT_LABELS, UNITS, type Ingredient, type Recipe, type RecipeInput, type Unit } from '../../../../shared/types';
 import { api } from '../../api';
 import { ErrorNote, Loading, PageHeader } from '../../components/ui';
 
@@ -16,6 +16,12 @@ interface Row {
 let nextKey = 1;
 const blankRow = (): Row => ({ key: nextKey++, quantity: '', unit: 'each', name: '' });
 const toRow = (i: Ingredient): Row => ({ key: nextKey++, quantity: formatPlain(i.quantity), unit: i.unit, name: i.name });
+
+/** The shopping units, plus an older unit if this row already uses one. */
+function unitOptions(current: Unit): Unit[] {
+  const units: Unit[] = [...UNITS];
+  return units.includes(current) ? units : [...units, current];
+}
 
 /** Plain decimals for editing (the input needs "1.5", not "1½"). */
 function formatPlain(n: number): string {
@@ -127,9 +133,9 @@ function RecipeForm({ recipe, allRecipes }: { recipe: Recipe | null; allRecipes:
                 onChange={(e) => update(row.key, { quantity: e.target.value })}
               />
               <select aria-label="Unit" value={row.unit} onChange={(e) => update(row.key, { unit: e.target.value as Unit })}>
-                {UNITS.map((u) => (
+                {unitOptions(row.unit).map((u) => (
                   <option key={u} value={u}>
-                    {u}
+                    {UNIT_LABELS[u] ?? u}
                   </option>
                 ))}
               </select>

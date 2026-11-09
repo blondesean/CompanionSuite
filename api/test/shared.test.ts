@@ -120,11 +120,36 @@ describe('grocery list', () => {
     expect(list).toEqual([]);
   });
 
+  it('scales portions per slot and rounds whole-item units up', () => {
+    const shop = [
+      recipe('chili', 'Chili', [
+        { name: 'Ground beef', quantity: 1, unit: 'lb' },
+        { name: 'Beans', quantity: 1, unit: 'can' },
+        { name: 'Onion', quantity: 1, unit: 'each' },
+      ]),
+      recipe('bowls', 'Bowls', [{ name: 'Onion', quantity: 0.5, unit: 'each' }]),
+    ];
+    const list = buildGroceryList(
+      { breakfast: null, lunch: 'bowls', dinner: 'chili', filler: null },
+      shop,
+      { breakfast: 1, lunch: 1, dinner: 1.5, filler: 1 },
+    );
+    expect(list.map((i) => `${i.name}:${i.quantity}${i.unit}`)).toEqual([
+      'Beans:2can', // 1.5 cans → buy 2
+      'Ground beef:1.5lb', // weight keeps fractions
+      'Onion:2each', // 1.5 + 0.5
+    ]);
+    expect(list.find((i) => i.name === 'Onion')!.recipes).toEqual(['Bowls', 'Chili 1½×']);
+  });
+
   it('pluralizes units for amounts over one', () => {
+    expect(formatAmount(1.5, 'lb')).toBe('1½ lbs');
+    expect(formatAmount(1, 'lb')).toBe('1 lb');
+    expect(formatAmount(3, 'package')).toBe('3 packages');
     expect(formatAmount(2, 'can')).toBe('2 cans');
     expect(formatAmount(0.5, 'cup')).toBe('½ cup');
     expect(formatAmount(1, 'clove')).toBe('1 clove');
-    expect(formatAmount(2, 'lb')).toBe('2 lb');
+    expect(formatAmount(2, 'lb')).toBe('2 lbs');
     expect(formatAmount(3, 'each')).toBe('3');
   });
 

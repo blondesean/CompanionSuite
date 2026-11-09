@@ -1,18 +1,29 @@
-import { MEAL_SLOTS, type MealSlots, type Recipe } from './types';
+import { MEAL_SLOTS, type MealScale, type MealSlots, type Recipe } from './types';
 
 export interface GroceryItem {
   name: string;
   quantity: number;
   unit: string;
+  /** Recipe names, with the portion multiplier when it isn't 1 (e.g. "Chili ×1.5"). */
   recipes: string[];
 }
 
+/** Units you can only buy whole, so totals round up (1½ cans → 2 cans). */
+const WHOLE_UNITS = new Set(['each', 'can', 'package']);
+
+export const defaultScale = (): MealScale => ({ breakfast: 1, lunch: 1, dinner: 1, filler: 1 });
+
+export function formatScale(scale: number): string {
+  return `${formatQuantity(scale)}×`;
+}
+
 /**
- * Totals every ingredient used by the week's meals. Ingredients merge when
- * the name (ignoring case/whitespace) and unit match; different units stay
- * on separate lines. Sorted alphabetically by name.
+ * Totals every ingredient used by the week's meals, multiplied by each
+ * slot's portion size. Ingredients merge when the name (ignoring
+ * case/whitespace) and unit match; different units stay on separate lines.
+ * Sorted alphabetically by name.
  */
-export function buildGroceryList(slots: MealSlots, recipes: Recipe[]): GroceryItem[] {
+export function buildGroceryList(slots: MealSlots, recipes: Recipe[], scale: MealScale = defaultScale()): GroceryItem[] {
   const recipesById = new Map(recipes.map((r) => [r.id, r]));
   const items = new Map<string, GroceryItem>();
 
@@ -20,6 +31,8 @@ export function buildGroceryList(slots: MealSlots, recipes: Recipe[]): GroceryIt
     const recipeId = slots[slot];
     const recipe = recipeId ? recipesById.get(recipeId) : undefined;
     if (!recipe) continue;
+    const factor = scale[slot] ?? 1;
+    const label = factor === 1 ? recipe.name : `${recipe.name} ${formatScale(factor)}`;
 
     for (const ing of recipe.ingredients) {
       const name = ing.name.trim().replace(/\s+/g, ' ');
@@ -27,12 +40,16 @@ export function buildGroceryList(slots: MealSlots, recipes: Recipe[]): GroceryIt
       const key = `${name.toLowerCase()}|${ing.unit}`;
       const existing = items.get(key);
       if (existing) {
-        existing.quantity += ing.quantity;
-        if (!existing.recipes.includes(recipe.name)) existing.recipes.push(recipe.name);
+        existing.quantity += ing.quantity * factor;
+        if (!existing.recipes.includes(label)) existing.recipes.push(label);
       } else {
-        items.set(key, { name, quantity: ing.quantity, unit: ing.unit, recipes: [recipe.name] });
+        items.set(key, { name, quantity: ing.quantity * factor, unit: ing.unit, recipes: [label] });
       }
     }
+  }
+
+  for (const item of items.values()) {
+    if (WHOLE_UNITS.has(item.unit)) item.quantity = Math.ceil(item.quantity - 1e-9);
   }
 
   return [...items.values()].sort(
@@ -60,16 +77,17 @@ export function formatQuantity(quantity: number): string {
 }
 
 const PLURAL_UNITS: Record<string, string> = {
+  lb: 'lbs',
   can: 'cans',
+  package: 'packages',
   clove: 'cloves',
   cup: 'cups',
   bunch: 'bunches',
   slice: 'slices',
   pinch: 'pinches',
-  package: 'packages',
 };
 
-/** "2 cans", "½ cup", "3" (for "each"). */
+/** "2 cans", "1½ lbs", "½ cup", "3" (for "each"). */
 export function formatAmount(quantity: number, unit: string): string {
   if (unit === 'each') return formatQuantity(quantity);
   const label = quantity > 1 ? (PLURAL_UNITS[unit] ?? unit) : unit;
