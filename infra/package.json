@@ -1,0 +1,20 @@
+{
+  "name": "@companionsuite/infra",
+  "private": true,
+  "scripts": {
+    "synth": "cdk synth",
+    "deploy": "cdk deploy --outputs-file outputs.json",
+    "diff": "cdk diff",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.220.0",
+    "constructs": "^10.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "aws-cdk": "^2.1100.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.0"
+  }
+}

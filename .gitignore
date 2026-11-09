@@ -1,0 +1,9 @@
+node_modules/
+dist/
+cdk.out/
+*.tsbuildinfo
+.env
+.env.*
+api/.local-data.json
+infra/outputs.json
+screenshots/
