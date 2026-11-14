@@ -1,18 +1,27 @@
 import { createHash } from 'node:crypto';
 import { buildChoreWeek, isChoreDue } from '../../shared/chores';
 import { REMINDER_MINUTES } from '../../shared/reminders';
-import { defaultScale } from '../../shared/grocery';
+import { dateKind, nextOccurrence } from '../../shared/dates';
+import { defaultScale, groceryKey } from '../../shared/grocery';
 import {
   ALL_UNITS,
+  DATE_KINDS,
   FUN_CATEGORIES,
   MEAL_SLOT_LABELS,
   MEAL_SLOTS,
   type Chore,
   type ChoreInput,
   type Completion,
+  type DateKind,
+  type ExtraItem,
+  type ExtraItemInput,
   type FunCategory,
   type FunIdea,
   type FunIdeaInput,
+  type GroceryMark,
+  type GroceryWeek,
+  type ImportantDate,
+  type ImportantDateInput,
   type MealPlan,
   type MealSlots,
   type Recipe,
@@ -20,6 +29,7 @@ import {
   type Summary,
   type TodoInput,
   type Unit,
+  UNITS,
 } from '../../shared/types';
 import { addWeeks, currentWeek, isISODate, isWeekStart } from '../../shared/weeks';
 import {
@@ -62,13 +72,22 @@ router.on('GET', '/me', async ({ user }) => user);
 
 router.on('GET', '/summary', async ({ query, deps }): Promise<Summary> => {
   const week = query.week ? weekParam(query.week) : currentWeek(deps.now());
-  const [chores, completions, todos, plan, fun] = await Promise.all([
+  // The client says what day it is for them, so countdowns match their calendar.
+  const today = isISODate(query.today) ? query.today : null;
+  const [chores, completions, todos, plan, fun, dates] = await Promise.all([
     deps.store.query<Chore>('CHORE'),
     deps.store.query<Completion>('COMPLETION', { beginsWith: `${week}#` }),
     deps.store.query<StoredTodo>('TODO'),
     deps.store.get<MealPlan>('MEALPLAN', week),
     deps.store.query<FunIdea>('FUN'),
+    today ? deps.store.query<ImportantDate>('DATE') : Promise.resolve([]),
   ]);
+  const soonest = today
+    ? dates
+        .map((d) => ({ d, next: nextOccurrence(d, today) }))
+        .filter((x) => x.next.daysUntil >= 0)
+        .sort((a, b) => a.next.daysUntil - b.next.daysUntil)[0]
+    : undefined;
   const due = chores.filter((c) => isChoreDue(c, week));
   const done = new Set(completions.map((c) => c.choreId));
   const now = deps.now().toISOString();
@@ -79,6 +98,9 @@ router.on('GET', '/summary', async ({ query, deps }): Promise<Summary> => {
     todosOpen: todos.length,
     todosOverdue: todos.filter((t) => t.dueAt && t.dueAt < now).length,
     funIdeas: fun.filter((f) => !f.doneOn).length,
+    nextDate: soonest
+      ? { title: soonest.d.title, icon: dateKind(soonest.d.kind).icon, daysUntil: soonest.next.daysUntil }
+      : null,
   };
 });
 
@@ -243,6 +265,101 @@ router.on('PUT', '/meals/:week', async ({ params, body, user, deps }) => {
   const plan: MealPlan = { week, slots, scale, updatedAt: deps.now().toISOString(), updatedBy: user.id };
   await deps.store.put('MEALPLAN', week, plan);
   return plan;
+});
+
+// ---------- grocery: à la carte items and shopping marks ----------
+// Both are per week. Extras live under EXTRA with sk `${week}#${id}`. Each
+// checked/removed line is its own GROCERYMARK item with sk `${week}#${key}`, so
+// two people ticking things off at the store never overwrite each other.
+
+const RECENT_WEEKS = 8;
+const MAX_RECENT = 12;
+
+type StoredMark = { key: string; mark: GroceryMark };
+
+function parseExtra(body: unknown): ExtraItemInput {
+  const o = asObject(body);
+  if (!(UNITS as readonly string[]).includes(o.unit as string)) throw badRequest('Unknown unit');
+  return {
+    name: str(o.name, 'Name', { min: 1, max: 80 }).replace(/\s+/g, ' '),
+    quantity: num(o.quantity ?? 1, 'Amount', 0.01, 10_000),
+    unit: o.unit as Unit,
+  };
+}
+
+const extraSk = (week: string, id: string) => `${week}#${id}`;
+const markSk = (week: string, key: string) => `${week}#${key}`;
+
+router.on('GET', '/grocery/:week', async ({ params, deps }): Promise<GroceryWeek> => {
+  const week = weekParam(params.week);
+  const [extras, marks, earlier] = await Promise.all([
+    deps.store.query<ExtraItem>('EXTRA', { beginsWith: `${week}#` }),
+    deps.store.query<StoredMark>('GROCERYMARK', { beginsWith: `${week}#` }),
+    // The bare `${week}` sorts before every `${week}#...`, so this stops at last week.
+    deps.store.query<ExtraItem>('EXTRA', { gte: addWeeks(week, -RECENT_WEEKS), lte: week, reverse: true }),
+  ]);
+  const seen = new Set(extras.map((e) => e.name.toLowerCase()));
+  const recent: ExtraItemInput[] = [];
+  for (const e of earlier) {
+    const name = e.name.toLowerCase();
+    if (seen.has(name) || recent.length >= MAX_RECENT) continue;
+    seen.add(name);
+    recent.push({ name: e.name, quantity: e.quantity, unit: e.unit });
+  }
+  return {
+    week,
+    extras: extras.map(clean).sort((a, b) => (a.addedAt < b.addedAt ? -1 : 1)),
+    marks: Object.fromEntries(marks.map((m) => [m.key, m.mark])),
+    recent,
+  };
+});
+
+router.on('POST', '/grocery/:week/extras', async ({ params, body, user, deps }) => {
+  const week = weekParam(params.week);
+  const input = parseExtra(body);
+  const key = groceryKey(input.name, input.unit);
+  // Adding something that's already on the à la carte list adds to its amount.
+  const existing = (await deps.store.query<ExtraItem>('EXTRA', { beginsWith: `${week}#` })).find(
+    (e) => groceryKey(e.name, e.unit) === key,
+  );
+  const extra: ExtraItem = existing
+    ? { ...clean(existing), quantity: existing.quantity + input.quantity }
+    : { ...input, id: deps.newId(), week, addedBy: user.id, addedAt: deps.now().toISOString() };
+  await deps.store.put('EXTRA', extraSk(week, extra.id), extra);
+  // A line that was removed or ticked off comes back when you add to it.
+  await deps.store.delete('GROCERYMARK', markSk(week, key));
+  return extra;
+});
+
+router.on('PUT', '/grocery/:week/extras/:id', async ({ params, body, deps }) => {
+  const week = weekParam(params.week);
+  const existing = await deps.store.get<ExtraItem>('EXTRA', extraSk(week, params.id));
+  if (!existing) throw notFound('Item');
+  const extra: ExtraItem = { ...clean(existing), ...parseExtra(body) };
+  await deps.store.put('EXTRA', extraSk(week, extra.id), extra);
+  return extra;
+});
+
+router.on('DELETE', '/grocery/:week/extras/:id', async ({ params, deps }) => {
+  await deps.store.delete('EXTRA', extraSk(weekParam(params.week), params.id));
+});
+
+router.on('PUT', '/grocery/:week/marks', async ({ params, body, deps }) => {
+  const week = weekParam(params.week);
+  const o = asObject(body);
+  const key = str(o.key, 'key', { min: 1, max: 200 });
+  if (o.mark === null) {
+    await deps.store.delete('GROCERYMARK', markSk(week, key));
+    return;
+  }
+  if (o.mark !== 'checked' && o.mark !== 'removed') throw badRequest('mark must be checked, removed or null');
+  await deps.store.put('GROCERYMARK', markSk(week, key), { key, mark: o.mark });
+});
+
+router.on('POST', '/grocery/:week/uncheck-all', async ({ params, deps }) => {
+  const week = weekParam(params.week);
+  const marks = await deps.store.query<StoredMark>('GROCERYMARK', { beginsWith: `${week}#` });
+  await Promise.all(marks.filter((m) => m.mark === 'checked').map((m) => deps.store.delete('GROCERYMARK', m.sk)));
 });
 
 // ---------- to-dos ----------
@@ -462,4 +579,49 @@ router.on('POST', '/fun/:id/undone', async ({ params, deps }) => {
 
 router.on('DELETE', '/fun/:id', async ({ params, deps }) => {
   await deps.store.delete('FUN', params.id);
+});
+
+// ---------- important dates ----------
+
+const DATE_KIND_IDS: readonly string[] = DATE_KINDS.map((k) => k.id);
+
+function parseImportantDate(body: unknown): ImportantDateInput {
+  const o = asObject(body);
+  if (!isISODate(o.date)) throw badRequest('Date must be YYYY-MM-DD');
+  if (typeof o.yearly !== 'boolean') throw badRequest('Choose every year or one time');
+  if (!DATE_KIND_IDS.includes(o.kind as string)) throw badRequest('Unknown kind of date');
+  return {
+    title: str(o.title, 'Title', { min: 1, max: 100 }),
+    date: o.date,
+    yearly: o.yearly,
+    kind: o.kind as DateKind,
+    notes: o.notes == null ? '' : str(o.notes, 'Notes', { max: 1000 }),
+  };
+}
+
+router.on('GET', '/dates', async ({ deps }) => (await deps.store.query<ImportantDate>('DATE')).map(clean));
+
+router.on('POST', '/dates', async ({ body, user, deps }) => {
+  const now = deps.now().toISOString();
+  const item: ImportantDate = {
+    ...parseImportantDate(body),
+    id: deps.newId(),
+    createdBy: user.id,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await deps.store.put('DATE', item.id, item);
+  return item;
+});
+
+router.on('PUT', '/dates/:id', async ({ params, body, deps }) => {
+  const existing = await deps.store.get<ImportantDate>('DATE', params.id);
+  if (!existing) throw notFound('Date');
+  const item: ImportantDate = { ...clean(existing), ...parseImportantDate(body), updatedAt: deps.now().toISOString() };
+  await deps.store.put('DATE', item.id, item);
+  return item;
+});
+
+router.on('DELETE', '/dates/:id', async ({ params, deps }) => {
+  await deps.store.delete('DATE', params.id);
 });

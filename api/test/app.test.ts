@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ChoreWeek, Completion, FunIdea, MealPlan, Recipe, Summary, Todo } from '../../shared/types';
+import type {
+  ChoreWeek,
+  Completion,
+  ExtraItem,
+  FunIdea,
+  GroceryWeek,
+  ImportantDate,
+  MealPlan,
+  Recipe,
+  Summary,
+  Todo,
+} from '../../shared/types';
 import { router } from '../src/app';
 import type { Deps, PushPayload } from '../src/http';
 import { sendDueReminders } from '../src/reminders';
@@ -148,6 +159,88 @@ describe('meals', () => {
       (await call('POST', '/recipes', { name: 'Bad', ingredients: [{ name: 'X', quantity: 1, unit: 'bucket' }] }))
         .status,
     ).toBe(400);
+  });
+});
+
+describe('grocery week', () => {
+  it('keeps à la carte items per week, merges repeats and suggests recent ones', async () => {
+    const shampoo = await ok<ExtraItem>('POST', '/grocery/2026-11-02/extras', { name: 'Shampoo', quantity: 1, unit: 'each' });
+    await ok('POST', '/grocery/2026-11-02/extras', { name: ' shampoo ', quantity: 1, unit: 'each' }, PARTNER);
+    let week = await ok<GroceryWeek>('GET', '/grocery/2026-11-02');
+    expect(week.extras).toEqual([expect.objectContaining({ id: shampoo.id, name: 'Shampoo', quantity: 2, addedBy: 'sean' })]);
+
+    // Next week starts empty but offers last week's items.
+    week = await ok<GroceryWeek>('GET', '/grocery/2026-11-09');
+    expect(week.extras).toEqual([]);
+    expect(week.recent).toEqual([{ name: 'Shampoo', quantity: 2, unit: 'each' }]);
+    await ok('POST', '/grocery/2026-11-09/extras', { name: 'Paper towels', quantity: 1, unit: 'package' });
+    await ok('POST', '/grocery/2026-11-09/extras', { name: 'Shampoo', quantity: 1, unit: 'each' });
+    week = await ok<GroceryWeek>('GET', '/grocery/2026-11-09');
+    expect(week.extras.map((e) => e.name)).toEqual(['Paper towels', 'Shampoo']);
+    expect(week.recent).toEqual([]); // already on this week's list
+
+    const towels = week.extras[0];
+    const edited = await ok<ExtraItem>('PUT', `/grocery/2026-11-09/extras/${towels.id}`, { ...towels, quantity: 2 });
+    expect(edited.quantity).toBe(2);
+    await ok('DELETE', `/grocery/2026-11-09/extras/${towels.id}`);
+    expect((await ok<GroceryWeek>('GET', '/grocery/2026-11-09')).extras.map((e) => e.name)).toEqual(['Shampoo']);
+
+    expect((await call('POST', '/grocery/2026-11-09/extras', { name: 'X', quantity: 1, unit: 'cup' })).status).toBe(400);
+    expect((await call('POST', '/grocery/2026-11-09/extras', { name: '', quantity: 1, unit: 'each' })).status).toBe(400);
+    expect((await call('POST', '/grocery/2026-11-10/extras', { name: 'X', unit: 'each' })).status).toBe(400);
+  });
+
+  it('shares checked and removed lines between both people', async () => {
+    await ok('PUT', '/grocery/2026-11-02/marks', { key: 'milk|each', mark: 'checked' });
+    await ok('PUT', '/grocery/2026-11-02/marks', { key: 'eggs|each', mark: 'removed' }, PARTNER);
+    await ok('PUT', '/grocery/2026-11-02/marks', { key: 'bread|package', mark: 'checked' }, PARTNER);
+    expect((await ok<GroceryWeek>('GET', '/grocery/2026-11-02')).marks).toEqual({
+      'milk|each': 'checked',
+      'eggs|each': 'removed',
+      'bread|package': 'checked',
+    });
+    expect((await ok<GroceryWeek>('GET', '/grocery/2026-11-09')).marks).toEqual({}); // per week
+
+    await ok('PUT', '/grocery/2026-11-02/marks', { key: 'bread|package', mark: null });
+    await ok('POST', '/grocery/2026-11-02/uncheck-all');
+    expect((await ok<GroceryWeek>('GET', '/grocery/2026-11-02')).marks).toEqual({ 'eggs|each': 'removed' });
+
+    // Adding an à la carte item brings a removed line back.
+    await ok('POST', '/grocery/2026-11-02/extras', { name: 'Eggs', quantity: 12, unit: 'each' });
+    expect((await ok<GroceryWeek>('GET', '/grocery/2026-11-02')).marks).toEqual({});
+
+    expect((await call('PUT', '/grocery/2026-11-02/marks', { key: 'milk|each', mark: 'eaten' })).status).toBe(400);
+    expect((await call('PUT', '/grocery/2026-11-02/marks', { key: '', mark: 'checked' })).status).toBe(400);
+  });
+});
+
+describe('important dates', () => {
+  const summary = (query = '&today=2026-11-13') => ok<Summary>('GET', `/summary?week=2026-11-09${query}`);
+
+  it('saves dates and shows the soonest on the home screen', async () => {
+    expect((await summary()).nextDate).toBeNull();
+    const trip = await ok<ImportantDate>('POST', '/dates', { title: 'Lisbon trip', date: '2027-01-10', yearly: false, kind: 'trip' });
+    await ok('POST', '/dates', { title: 'Her birthday', date: '1996-11-20', yearly: true, kind: 'birthday' }, PARTNER);
+    await ok('POST', '/dates', { title: 'Old concert', date: '2026-10-01', yearly: false, kind: 'event' });
+
+    expect((await summary()).nextDate).toEqual({ title: 'Her birthday', icon: '🎂', daysUntil: 7 });
+    expect((await summary('')).nextDate).toBeNull(); // no "today", no countdown
+
+    const edited = await ok<ImportantDate>('PUT', `/dates/${trip.id}`, { ...trip, date: '2026-11-14' });
+    expect(edited).toMatchObject({ date: '2026-11-14', createdAt: trip.createdAt });
+    expect((await summary()).nextDate).toEqual({ title: 'Lisbon trip', icon: '✈️', daysUntil: 1 });
+
+    await ok('DELETE', `/dates/${trip.id}`);
+    expect((await ok<ImportantDate[]>('GET', '/dates')).map((d) => d.title).sort()).toEqual(['Her birthday', 'Old concert']);
+  });
+
+  it('validates dates', async () => {
+    const valid = { title: 'X', date: '2027-01-01', yearly: true, kind: 'event' };
+    expect((await call('POST', '/dates', { ...valid, title: '' })).status).toBe(400);
+    expect((await call('POST', '/dates', { ...valid, date: '2027-02-30' })).status).toBe(400);
+    expect((await call('POST', '/dates', { ...valid, yearly: undefined })).status).toBe(400);
+    expect((await call('POST', '/dates', { ...valid, kind: 'party' })).status).toBe(400);
+    expect((await call('PUT', '/dates/nope', valid)).status).toBe(404);
   });
 });
 

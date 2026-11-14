@@ -4,11 +4,12 @@ A private iPhone app (PWA) for two people: weekly chores, meal prep with a groce
 
 ## Modules
 
-- **Control center**: a 3×3 grid of tiles, each showing a live status ("3 left", "1 overdue"). Six slots are free for future modules.
+- **Control center**: a 3×3 grid of tiles, each showing a live status ("3 left", "1 overdue"). Four slots are free for future modules.
 - **Chores**: shows each week's chores, who did each one last time, and who did it this week. Chores repeat every N weeks. The History tab has a table of completions you can filter by date, person and chore.
-- **Meals**: pick a recipe for breakfast, lunch, dinner and filler each week. Recipes hold ingredients with amounts. The grocery list adds up every ingredient alphabetically, with check-offs, Share and Copy.
+- **Meals**: pick a recipe for breakfast, lunch, dinner and filler each week. Recipes hold ingredients with amounts. Each week also has **à la carte** items (shampoo, paper towels…) with one-tap re-adding of recent ones. The grocery list adds everything up alphabetically. Check-offs are shared between both phones, so you can split up at the store, and lines you don't need can be removed (and put back). Share, Copy and per-meal portion sizes are at the bottom.
 - **To-Do**: due dates, assignee (anyone, either of you, or both) and reminder times. Reminders go to the assignee, or to both of you if it's unassigned or assigned to both. Completing a task plays a click-and-chime sound and moves it to the Done history.
 - **Fun**: a shared list of things to do together (date nights, food, activities, trips, at home). Filter by category, use **🎲 Pick one for us** to choose at random, and mark ideas done on a date. They go to a "Done together" log grouped by month, with a "Do again" button.
+- **Dates**: birthdays, anniversaries, holidays, trips and events with a live countdown, soonest first. Each one repeats every year or happens once. Yearly ones count the years ("Turns 30", "5th anniversary"), and one-time dates that have passed move to a Past section. The home tile shows the next one.
 
 ## How it fits together
 
@@ -26,7 +27,7 @@ iPhone (PWA) ──► CloudFront + S3      static app, cached offline by a serv
 |---|---|
 | `frontend/` | React + Vite PWA (`src/pages/*` per module, `src/sw.ts` service worker) |
 | `api/` | One router for every route (`src/app.ts`), Lambda entry points, local dev server, tests |
-| `shared/` | Code used by both sides: types, week math, chore schedule, grocery totals, reminder timing |
+| `shared/` | Code used by both sides: types, week math, chore schedule, grocery totals, date countdowns, reminder timing |
 | `infra/` | AWS CDK stack (`lib/stack.ts`) |
 | `scripts/` | One-off setup: VAPID keys for push, adding users |
 

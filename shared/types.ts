@@ -99,6 +99,34 @@ export interface MealPlan {
   updatedBy: string | null;
 }
 
+// ---------- Grocery (per week) ----------
+
+/** An à la carte item (shampoo, paper towels…) added to one week's list. */
+export interface ExtraItemInput {
+  name: string;
+  quantity: number;
+  unit: Unit;
+}
+
+export interface ExtraItem extends ExtraItemInput {
+  id: string;
+  week: string;
+  addedBy: string;
+  addedAt: string;
+}
+
+/** Shopping state of one grocery line, shared by both phones. */
+export type GroceryMark = 'checked' | 'removed';
+
+export interface GroceryWeek {
+  week: string;
+  extras: ExtraItem[];
+  /** Keyed by grocery item key (see groceryKey). */
+  marks: Record<string, GroceryMark>;
+  /** À la carte items from recent weeks that aren't on this week's list, for quick re-adding. */
+  recent: ExtraItemInput[];
+}
+
 // ---------- To-Do ----------
 
 export const REMINDER_OPTIONS = [
@@ -158,6 +186,33 @@ export interface FunIdea extends FunIdeaInput {
   doneBy: string | null;
 }
 
+// ---------- Dates ----------
+
+export const DATE_KINDS = [
+  { id: 'birthday', label: 'Birthday', icon: '🎂' },
+  { id: 'anniversary', label: 'Anniversary', icon: '💞' },
+  { id: 'holiday', label: 'Holiday', icon: '🎉' },
+  { id: 'trip', label: 'Trip', icon: '✈️' },
+  { id: 'event', label: 'Event', icon: '📅' },
+] as const;
+export type DateKind = (typeof DATE_KINDS)[number]['id'];
+
+export interface ImportantDateInput {
+  title: string;
+  /** YYYY-MM-DD. For yearly dates, the original date (its year counts the years). */
+  date: string;
+  yearly: boolean;
+  kind: DateKind;
+  notes: string;
+}
+
+export interface ImportantDate extends ImportantDateInput {
+  id: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ---------- Home ----------
 
 export interface Summary {
@@ -167,4 +222,6 @@ export interface Summary {
   todosOpen: number;
   todosOverdue: number;
   funIdeas: number;
+  /** The soonest upcoming date, when the request says what day it is. */
+  nextDate: { title: string; icon: string; daysUntil: number } | null;
 }

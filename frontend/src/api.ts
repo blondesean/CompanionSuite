@@ -3,8 +3,14 @@ import type {
   ChoreInput,
   ChoreWeek,
   Completion,
+  ExtraItem,
+  ExtraItemInput,
   FunIdea,
   FunIdeaInput,
+  GroceryMark,
+  GroceryWeek,
+  ImportantDate,
+  ImportantDateInput,
   MealPlan,
   MealScale,
   MealSlots,
@@ -58,7 +64,7 @@ const enc = encodeURIComponent;
 export const api = {
   devMembers: async (): Promise<User[]> => (await fetch('/api/dev/members')).json(),
   members: () => request<Member[]>('GET', '/members'),
-  summary: (week: string) => request<Summary>('GET', `/summary?week=${week}`),
+  summary: (week: string, today: string) => request<Summary>('GET', `/summary?week=${week}&today=${today}`),
 
   chores: () => request<Chore[]>('GET', '/chores'),
   createChore: (input: ChoreInput) => request<Chore>('POST', '/chores', input),
@@ -77,6 +83,20 @@ export const api = {
   mealPlan: (week: string) => request<MealPlan>('GET', `/meals/${week}`),
   saveMealPlan: (week: string, slots: MealSlots, scale?: MealScale) =>
     request<MealPlan>('PUT', `/meals/${week}`, { slots, scale }),
+
+  groceryWeek: (week: string) => request<GroceryWeek>('GET', `/grocery/${week}`),
+  addExtra: (week: string, input: ExtraItemInput) => request<ExtraItem>('POST', `/grocery/${week}/extras`, input),
+  updateExtra: (week: string, id: string, input: ExtraItemInput) =>
+    request<ExtraItem>('PUT', `/grocery/${week}/extras/${enc(id)}`, input),
+  deleteExtra: (week: string, id: string) => request<void>('DELETE', `/grocery/${week}/extras/${enc(id)}`),
+  markGrocery: (week: string, key: string, mark: GroceryMark | null) =>
+    request<void>('PUT', `/grocery/${week}/marks`, { key, mark }),
+  uncheckAll: (week: string) => request<void>('POST', `/grocery/${week}/uncheck-all`),
+
+  dates: () => request<ImportantDate[]>('GET', '/dates'),
+  createDate: (input: ImportantDateInput) => request<ImportantDate>('POST', '/dates', input),
+  updateDate: (id: string, input: ImportantDateInput) => request<ImportantDate>('PUT', `/dates/${enc(id)}`, input),
+  deleteDate: (id: string) => request<void>('DELETE', `/dates/${enc(id)}`),
 
   todos: () => request<Todo[]>('GET', '/todos'),
   todoHistory: () => request<Todo[]>('GET', '/todos/history'),

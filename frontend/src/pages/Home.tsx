@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import type { Summary } from '../../../shared/types';
-import { currentWeek } from '../../../shared/weeks';
+import { formatCountdown } from '../../../shared/dates';
+import { currentWeek, localDate } from '../../../shared/weeks';
 import { api } from '../api';
 import { useSession } from '../App';
 import { firstName, greeting } from '../format';
@@ -49,6 +50,16 @@ const TILES: Tile[] = [
     tone: 'fun',
     status: (s) => ({ text: s.funIdeas === 0 ? 'Add ideas' : `${s.funIdeas} idea${s.funIdeas === 1 ? '' : 's'}` }),
   },
+  {
+    to: '/dates',
+    label: 'Dates',
+    icon: '📅',
+    tone: 'dates',
+    status: (s) =>
+      s.nextDate
+        ? { text: `${s.nextDate.icon} ${formatCountdown(s.nextDate.daysUntil)}${s.nextDate.daysUntil === 0 ? '!' : ''}` }
+        : { text: 'Add dates' },
+  },
 ];
 
 const GRID_SIZE = 9;
@@ -56,7 +67,8 @@ const GRID_SIZE = 9;
 export function Home() {
   const { user } = useSession();
   const week = currentWeek();
-  const summary = useQuery({ queryKey: ['summary', week], queryFn: () => api.summary(week) });
+  const day = localDate();
+  const summary = useQuery({ queryKey: ['summary', week, day], queryFn: () => api.summary(week, day) });
   const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (

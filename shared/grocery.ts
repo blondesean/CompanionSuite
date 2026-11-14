@@ -1,11 +1,22 @@
-import { MEAL_SLOTS, type MealScale, type MealSlots, type Recipe } from './types';
+import { MEAL_SLOTS, type ExtraItemInput, type MealScale, type MealSlots, type Recipe } from './types';
 
 export interface GroceryItem {
+  /** Stable id for the line (see groceryKey), used for check/remove marks. */
+  key: string;
   name: string;
   quantity: number;
   unit: string;
-  /** Recipe names, with the portion multiplier when it isn't 1 (e.g. "Chili ×1.5"). */
+  /** Recipe names, with the portion multiplier when it isn't 1 (e.g. "Chili 1½×"), or "À la carte". */
   recipes: string[];
+}
+
+export const EXTRA_LABEL = 'À la carte';
+
+const tidyName = (name: string) => name.trim().replace(/\s+/g, ' ');
+
+/** Lines merge when the name (ignoring case/spacing) and unit match. */
+export function groceryKey(name: string, unit: string): string {
+  return `${tidyName(name).toLowerCase()}|${unit}`;
 }
 
 /** Units you can only buy whole, so totals round up (1½ cans → 2 cans). */
@@ -19,13 +30,31 @@ export function formatScale(scale: number): string {
 
 /**
  * Totals every ingredient used by the week's meals, multiplied by each
- * slot's portion size. Ingredients merge when the name (ignoring
- * case/whitespace) and unit match; different units stay on separate lines.
- * Sorted alphabetically by name.
+ * slot's portion size, plus the week's à la carte items. Lines merge when the
+ * name (ignoring case/whitespace) and unit match; different units stay on
+ * separate lines. Sorted alphabetically by name.
  */
-export function buildGroceryList(slots: MealSlots, recipes: Recipe[], scale: MealScale = defaultScale()): GroceryItem[] {
+export function buildGroceryList(
+  slots: MealSlots,
+  recipes: Recipe[],
+  scale: MealScale = defaultScale(),
+  extras: ExtraItemInput[] = [],
+): GroceryItem[] {
   const recipesById = new Map(recipes.map((r) => [r.id, r]));
   const items = new Map<string, GroceryItem>();
+
+  function add(rawName: string, quantity: number, unit: string, label: string) {
+    const name = tidyName(rawName);
+    if (!name) return;
+    const key = groceryKey(name, unit);
+    const existing = items.get(key);
+    if (existing) {
+      existing.quantity += quantity;
+      if (!existing.recipes.includes(label)) existing.recipes.push(label);
+    } else {
+      items.set(key, { key, name, quantity, unit, recipes: [label] });
+    }
+  }
 
   for (const slot of MEAL_SLOTS) {
     const recipeId = slots[slot];
@@ -34,19 +63,9 @@ export function buildGroceryList(slots: MealSlots, recipes: Recipe[], scale: Mea
     const factor = scale[slot] ?? 1;
     const label = factor === 1 ? recipe.name : `${recipe.name} ${formatScale(factor)}`;
 
-    for (const ing of recipe.ingredients) {
-      const name = ing.name.trim().replace(/\s+/g, ' ');
-      if (!name) continue;
-      const key = `${name.toLowerCase()}|${ing.unit}`;
-      const existing = items.get(key);
-      if (existing) {
-        existing.quantity += ing.quantity * factor;
-        if (!existing.recipes.includes(label)) existing.recipes.push(label);
-      } else {
-        items.set(key, { name, quantity: ing.quantity * factor, unit: ing.unit, recipes: [label] });
-      }
-    }
+    for (const ing of recipe.ingredients) add(ing.name, ing.quantity * factor, ing.unit, label);
   }
+  for (const extra of extras) add(extra.name, extra.quantity, extra.unit, EXTRA_LABEL);
 
   for (const item of items.values()) {
     if (WHOLE_UNITS.has(item.unit)) item.quantity = Math.ceil(item.quantity - 1e-9);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildChoreWeek, isChoreDue, nextDueWeek } from '../../shared/chores';
-import { buildGroceryList, formatAmount, formatQuantity, parseQuantity } from '../../shared/grocery';
+import { formatCountdown, nextOccurrence, sortDates, yearsLabel } from '../../shared/dates';
+import { buildGroceryList, formatAmount, formatQuantity, groceryKey, parseQuantity } from '../../shared/grocery';
 import { plannedReminders, reminderBody, reminderRecipients } from '../../shared/reminders';
 import type { Chore, Recipe } from '../../shared/types';
 import { addWeeks, formatWeekRange, isWeekStart, weekStart, weeksBetween } from '../../shared/weeks';
@@ -190,5 +191,71 @@ describe('reminders', () => {
     expect(reminderBody(1440)).toBe('Due tomorrow');
     expect(reminderBody(2880)).toBe('Due in 2 days');
     expect(reminderBody(10080)).toBe('Due in 1 week');
+  });
+});
+
+describe('grocery extras', () => {
+  it('rolls à la carte items into the list and merges matching lines', () => {
+    const recipe: Recipe = {
+      id: 'r1',
+      name: 'Omelette',
+      notes: '',
+      createdAt: '',
+      updatedAt: '',
+      ingredients: [{ name: 'Eggs', quantity: 6, unit: 'each' }],
+    };
+    const items = buildGroceryList({ breakfast: 'r1', lunch: null, dinner: null, filler: null }, [recipe], undefined, [
+      { name: 'Shampoo', quantity: 1, unit: 'each' },
+      { name: ' eggs ', quantity: 6, unit: 'each' },
+    ]);
+    expect(items.map((i) => [i.name, i.quantity, i.recipes.join('+')])).toEqual([
+      ['Eggs', 12, 'Omelette+À la carte'],
+      ['Shampoo', 1, 'À la carte'],
+    ]);
+    expect(items[0].key).toBe(groceryKey('EGGS ', 'each'));
+  });
+});
+
+describe('important dates', () => {
+  const today = '2026-11-13';
+
+  it('counts down to one-time and yearly dates', () => {
+    expect(nextOccurrence({ date: '2026-12-25', yearly: false }, today)).toEqual({ date: '2026-12-25', daysUntil: 42, years: null });
+    expect(nextOccurrence({ date: '2026-11-01', yearly: false }, today).daysUntil).toBe(-12);
+    // Yearly: later this year, already passed (rolls to next year), and today.
+    expect(nextOccurrence({ date: '1995-11-20', yearly: true }, today)).toEqual({ date: '2026-11-20', daysUntil: 7, years: 31 });
+    expect(nextOccurrence({ date: '2023-02-14', yearly: true }, today)).toEqual({ date: '2027-02-14', daysUntil: 93, years: 4 });
+    expect(nextOccurrence({ date: '2020-11-13', yearly: true }, today)).toMatchObject({ daysUntil: 0, years: 6 });
+    // Starts in the future: no year count yet.
+    expect(nextOccurrence({ date: '2027-03-01', yearly: true }, today)).toMatchObject({ date: '2027-03-01', years: null });
+    // Feb 29 lands on Feb 28 in other years.
+    expect(nextOccurrence({ date: '2024-02-29', yearly: true }, today).date).toBe('2027-02-28');
+    expect(nextOccurrence({ date: '2024-02-29', yearly: true }, '2028-01-01').date).toBe('2028-02-29');
+    // Across New Year.
+    expect(nextOccurrence({ date: '2025-01-01', yearly: true }, '2026-12-31')).toMatchObject({ date: '2027-01-01', daysUntil: 1 });
+  });
+
+  it('sorts upcoming soonest first and past most recent first', () => {
+    const base = { kind: 'event' as const, notes: '', createdBy: '', createdAt: '', updatedAt: '' };
+    const { upcoming, past } = sortDates(
+      [
+        { ...base, id: 'a', title: 'Trip', date: '2027-01-10', yearly: false },
+        { ...base, id: 'b', title: 'Birthday', date: '1995-11-20', yearly: true },
+        { ...base, id: 'c', title: 'Concert', date: '2026-10-01', yearly: false },
+        { ...base, id: 'd', title: 'Dinner', date: '2026-11-10', yearly: false },
+      ],
+      today,
+    );
+    expect(upcoming.map((d) => d.title)).toEqual(['Birthday', 'Trip']);
+    expect(past.map((d) => d.title)).toEqual(['Dinner', 'Concert']);
+  });
+
+  it('labels years and countdowns', () => {
+    expect(yearsLabel('birthday', 31)).toBe('Turns 31');
+    expect(yearsLabel('anniversary', 3)).toBe('3rd anniversary');
+    expect(yearsLabel('anniversary', 11)).toBe('11th anniversary');
+    expect(yearsLabel('anniversary', 22)).toBe('22nd anniversary');
+    expect(yearsLabel('holiday', null)).toBeNull();
+    expect([0, 1, 12, -1, -40].map(formatCountdown)).toEqual(['Today', 'Tomorrow', '12 days', 'Yesterday', '40 days ago']);
   });
 });

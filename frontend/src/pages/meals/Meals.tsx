@@ -5,6 +5,7 @@ import { MEAL_SLOT_LABELS, MEAL_SLOTS, type MealPlan, type MealSlot, type MealSl
 import { api } from '../../api';
 import { ErrorNote, Loading, PageHeader, Tabs, WeekNav } from '../../components/ui';
 import { useWeekParam } from '../../hooks';
+import { ExtrasCard, useGroceryWeek } from './Extras';
 
 export const SLOT_ICONS: Record<MealSlot, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍝', filler: '🍎' };
 
@@ -29,6 +30,7 @@ export function MealWeekView() {
   const key = ['meals', week];
   const plan = useQuery({ queryKey: key, queryFn: () => api.mealPlan(week) });
   const recipes = useQuery({ queryKey: ['recipes'], queryFn: api.recipes });
+  const grocery = useGroceryWeek(week);
 
   const save = useMutation({
     mutationFn: (slots: MealSlots) => api.saveMealPlan(week, slots),
@@ -50,6 +52,7 @@ export function MealWeekView() {
   const slots = plan.data?.slots;
   const filled = slots ? MEAL_SLOTS.filter((s) => slots[s]).length : 0;
   const recipeById = new Map((recipes.data ?? []).map((r) => [r.id, r]));
+  const extraCount = grocery.data?.extras.length ?? 0;
 
   return (
     <>
@@ -103,19 +106,23 @@ export function MealWeekView() {
             })}
           </ul>
 
-          {recipes.data.length === 0 ? (
+          {recipes.data.length === 0 && (
             <div className="card card-center">
               <p>Add your meal-prep recipes with their ingredients, then pick one for each meal.</p>
               <Link to="/meals/recipes/new" className="btn btn-primary">
                 Add a recipe
               </Link>
             </div>
-          ) : filled > 0 ? (
+          )}
+
+          <ExtrasCard week={week} />
+
+          {filled > 0 || extraCount > 0 ? (
             <Link to={`/meals/grocery/${week}`} className="btn btn-primary btn-block">
               🛒 Grocery list
             </Link>
           ) : (
-            <p className="hint center">Pick at least one meal to build a grocery list.</p>
+            recipes.data.length > 0 && <p className="hint center">Pick a meal or add an item to build a grocery list.</p>
           )}
         </>
       )}
